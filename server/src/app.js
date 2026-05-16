@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { notFound, errorHandler } from './middleware/error.middleware.js';
+import { stripeWebhook } from './controllers/payment.controller.js';
 
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
@@ -28,9 +29,10 @@ app.use(cors({
     credentials: true,
 }));
 
+// ─── Stripe webhook (MUST be before express.json() to preserve raw body) ─────
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
 // ─── Body parsers ─────────────────────────────────────────────────────────────
-// NOTE: /api/payments/webhook needs raw body — that route registers its own
-// express.raw() parser BEFORE this json() parser catches it (see payment.routes.js)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
