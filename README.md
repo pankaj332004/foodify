@@ -29,7 +29,7 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="./screenshots/hero.png" alt="Landing Page" width="100%"/>
+      <img src="./screenshots/home.png" alt="Landing Page" width="100%"/>
       <br/><b>🏠 Landing Page</b>
     </td>
     <td align="center" width="50%">
@@ -49,7 +49,7 @@
   </tr>
   <tr>
     <td align="center" colspan="2">
-      <img src="./screenshots/home.png" alt="Home Page" width="50%"/>
+      <img src="./screenshots/cuisine.png" alt="Home Page" width="50%"/>
       <br/><b>🍽️ Browse by Cuisine</b>
     </td>
   </tr>
