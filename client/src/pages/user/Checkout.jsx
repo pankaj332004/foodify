@@ -6,9 +6,10 @@ import { verifyPaymentAPI } from '../../services/order.api';
 import useCart from '../../hooks/useCart';
 import useAuth from '../../hooks/useAuth';
 import { formatCurrency } from '../../utils/formateCurrency';
-import { CreditCard, Banknote, MapPin, Truck, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
+import { CreditCard, Banknote, MapPin, QrCode, Copy, CheckCircle, CheckCircle2, ArrowRight, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import appConfig from '../../config/appConfig';
+import QRCode from 'react-qr-code';
 
 const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -34,7 +35,10 @@ const Checkout = () => {
     const finalTotal = total + tax + deliveryFee;
 
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'card'
+    const [paymentMethod, setPaymentMethod] = useState('cod');
+    const [showQRModal, setShowQRModal] = useState(false);
+    const [upiCopied, setUpiCopied] = useState(false);
+    const [upiConfirmed, setUpiConfirmed] = useState(false);
     const [formData, setFormData] = useState({
         street: '',
         city: '',
@@ -54,6 +58,21 @@ const Checkout = () => {
         }
     }, [items.length, isAuthenticated, navigate]);
 
+    // Generate UPI deep-link for QR code
+    const upiLink = `upi://pay?pa=${appConfig.upi.id}&pn=${encodeURIComponent(appConfig.upi.name)}&am=${finalTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(appConfig.upi.description)}`;
+
+    const handleCopyUPI = () => {
+        navigator.clipboard.writeText(appConfig.upi.id);
+        setUpiCopied(true);
+        setTimeout(() => setUpiCopied(false), 2000);
+    };
+
+    const handleSelectUPI = () => {
+        setPaymentMethod('upi');
+        setShowQRModal(true);
+        setUpiConfirmed(false);
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -66,6 +85,14 @@ const Checkout = () => {
             toast.error("Please fill in all address fields.");
             return;
         }
+
+        // Block UPI order if user hasn't confirmed payment via QR
+        if (paymentMethod === 'upi' && !upiConfirmed) {
+            toast.error("Please scan the QR code and confirm payment first.", { icon: '📱' });
+            setShowQRModal(true);
+            return;
+        }
+
 
         setIsSubmitting(true);
 
@@ -103,7 +130,7 @@ const Checkout = () => {
                 }
 
                 const options = {
-                    key: "rzp_test_placeholder", // Would normally be process.env.VITE_RAZORPAY_KEY
+                    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
                     amount: payment.amount.toString(),
                     currency: payment.currency,
                     name: "Foodify",
@@ -161,6 +188,7 @@ const Checkout = () => {
     if (items.length === 0) return null; // Prevent flash before redirect
 
     return (
+      <>
         <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 animate-fade-in">
             <div className="max-w-5xl mx-auto">
                 <div className="mb-8">
@@ -267,6 +295,30 @@ const Checkout = () => {
                                     </div>
                                 </button>
 
+                                {/* UPI / Scan & Pay */}
+                                <button
+                                    type="button"
+                                    onClick={handleSelectUPI}
+                                    className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+                                        paymentMethod === 'upi'
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 hover:border-orange-200 hover:bg-orange-50/50'
+                                    }`}
+                                >
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                                        paymentMethod === 'upi' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+                                    }`}>
+                                        <QrCode className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-gray-900">Scan & Pay (UPI)</h3>
+                                        <p className="text-xs text-gray-500">GPay, PhonePe, Paytm & more</p>
+                                    </div>
+                                    {upiConfirmed && paymentMethod === 'upi' && (
+                                        <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                                    )}
+                                </button>
+
                                 {/* Card Payment — Coming Soon */}
                                 <div className="relative flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-not-allowed opacity-60">
                                     <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
@@ -274,7 +326,7 @@ const Checkout = () => {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-gray-500">Credit Card / Pay Online</h3>
-                                        <p className="text-xs text-gray-400">Cards, UPI, Netbanking</p>
+                                        <p className="text-xs text-gray-400">Cards, Netbanking</p>
                                     </div>
                                     <span className="absolute top-2 right-2 bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
                                         Coming Soon
@@ -351,6 +403,78 @@ const Checkout = () => {
                 </div>
             </div>
         </div>
+
+        {/* ── UPI QR Code Modal ───────────────────────────────────── */}
+        {showQRModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative animate-fade-in">
+                    {/* Close */}
+                    <button
+                        onClick={() => setShowQRModal(false)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+
+                    {/* Header */}
+                    <div className="text-center mb-5">
+                        <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <QrCode className="w-7 h-7 text-orange-500" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Scan & Pay</h2>
+                        <p className="text-sm text-gray-500 mt-1">Scan with any UPI app to pay</p>
+                    </div>
+
+                    {/* Amount Badge */}
+                    <div className="bg-orange-50 border border-orange-100 rounded-2xl py-3 text-center mb-5">
+                        <p className="text-xs text-gray-500 mb-0.5">Amount to Pay</p>
+                        <p className="text-3xl font-black text-orange-600">₹{finalTotal.toFixed(2)}</p>
+                    </div>
+
+                    {/* QR Code */}
+                    <div className="flex justify-center mb-5">
+                        <div className="p-3 border-2 border-gray-100 rounded-2xl bg-white shadow-inner">
+                            <QRCode
+                                value={upiLink}
+                                size={180}
+                                fgColor="#1f2937"
+                                bgColor="#ffffff"
+                            />
+                        </div>
+                    </div>
+
+                    {/* UPI ID */}
+                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-5">
+                        <p className="flex-1 text-sm font-mono text-gray-700 truncate">{appConfig.upi.id}</p>
+                        <button
+                            onClick={handleCopyUPI}
+                            className="shrink-0 text-orange-500 hover:text-orange-700 transition-colors"
+                        >
+                            {upiCopied
+                                ? <CheckCircle className="w-5 h-5 text-green-500" />
+                                : <Copy className="w-5 h-5" />
+                            }
+                        </button>
+                    </div>
+
+                    {/* Supported Apps */}
+                    <p className="text-center text-xs text-gray-400 mb-4">Works with GPay, PhonePe, Paytm, BHIM & all UPI apps</p>
+
+                    {/* Confirm Button */}
+                    <button
+                        onClick={() => {
+                            setUpiConfirmed(true);
+                            setShowQRModal(false);
+                            toast.success("Payment marked! Place your order to confirm.", { icon: '✅' });
+                        }}
+                        className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all shadow-md shadow-green-500/30"
+                    >
+                        ✅ I've Paid — Confirm
+                    </button>
+                </div>
+            </div>
+        )}
+      </>
     );
 };
 

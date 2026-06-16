@@ -54,11 +54,23 @@ export const placeOrder = async (req, res, next) => {
             ...totals,
         });
 
-        // Handle COD payment immediately
         // Handle payment
         let paymentResponse = null;
         if (paymentMethod === 'cod') {
             const payment = await createCODPayment(order._id, req.user._id, order.totalAmount);
+            order.payment = payment._id;
+            await order.save();
+        } else if (paymentMethod === 'upi') {
+            // UPI / Scan & Pay — customer pays manually via QR, record as pending
+            const { default: Payment } = await import('../models/Payment.js');
+            const payment = await Payment.create({
+                order: order._id,
+                customer: req.user._id,
+                amount: order.totalAmount,
+                currency: 'INR',
+                method: 'upi',
+                status: 'pending',
+            });
             order.payment = payment._id;
             await order.save();
         } else if (paymentMethod === 'razorpay') {
